@@ -53,11 +53,29 @@ class Club {
     }
     
     update(dt) {
+        const ALLOWABLE_DIST_TO_STAR = 75;
+
         if (this.pathDist == 0) return;
         this.pathDist += dt / 10 / this.throw_time;
         if (this.pathDist > 0.8) this.isLanding = true;
-        // if pathDist > 1, you're caught!
+        // if pathDist > 1, you're caught (or not)!
         if (this.pathDist >= 1) {
+            let doesDrop = false;
+            if (this.launched) {
+                // if the club is launched, check if it was dropped or not
+                const probOfDrop = Game.launchRatingOdds(this.juggler.launchRating);
+                doesDrop |= Math.random() < probOfDrop;
+                // you can be this far from the star to still catch
+                const xDiff = Math.abs(this.juggler.location.x - this.launchedPlayerLoc.x);
+                const yDiff = Math.abs(this.juggler.location.y - this.launchedPlayerLoc.y);
+                const distToStar = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+                doesDrop |= distToStar > ALLOWABLE_DIST_TO_STAR;
+                this.juggler.launchRating = null;
+            }
+            if (doesDrop) {
+                //we're dropping the club, animate and end the point
+console.log("drop");
+            }
             this.pathDist = 0;
             this.isLanding = false;
             this.currHand = (this.currHand == Club.Hand.LEFT) ? Club.Hand.RIGHT : Club.Hand.LEFT;
@@ -354,6 +372,23 @@ class Juggler {
         }
         body.render(loc.x, loc.y - 24 * scale, pct, scale);
     }
+    
+    drawRatingWord() {
+        const RATING_WORD_TIME = 1000;
+        const HEIGHT = 30;
+        if (!this.launchRating) return;
+        const diffMS = Date.now() - this.launchRatingTime;
+        if (diffMS > RATING_WORD_TIME) {
+            return;
+        }
+        this.ctx.fillStyle = Game.launchRatingWordColor(this.launchRating);
+        this.ctx.font = "20px Arial";
+        this.ctx.textAlign = "center";
+        this.ctx.fillText(Game.launchRatingWord(this.launchRating),
+                          this.launchRatingLoc.x,
+                          this.launchRatingLoc.y - 75 - (diffMS / RATING_WORD_TIME) * HEIGHT);
+
+    }
 
     drawBottomHalf() {
         const LEGS_FPS = 16;
@@ -409,6 +444,7 @@ class Juggler {
             this.drawBottomHalf();
             this.drawClubs();
         }
+        this.drawRatingWord();
     }
 }
 
@@ -469,7 +505,7 @@ class Game {
     }
     
     // returns prob of dropping
-    static launchRatingsOdds(rating) {
+    static launchRatingOdds(rating) {
         switch(rating) {
             case Game.LaunchRating.PERFECT:
             case Game.LaunchRating.GREAT:
@@ -626,30 +662,12 @@ class Game {
     drawPlaying() {
         this.drawCourt();
         this.player.draw();
-        this.drawRatingWord();
         if (this.isKeyDown("Space")) {
             this.drawLaunchBar();
         } 
     }
 
-    drawRatingWord() {
-        const RATING_WORD_TIME = 1000;
-        const HEIGHT = 30;
-        if (!this.launchRating) return;
-        const diffMS = Date.now() - this.launchRatingTime;
-        if (diffMS > RATING_WORD_TIME) {
-            this.launchRating = null;
-            return;
-        }
-        this.ctx.fillStyle = Game.launchRatingWordColor(this.launchRating);
-        this.ctx.font = "20px Arial";
-        this.ctx.textAlign = "center";
-        this.ctx.fillText(Game.launchRatingWord(this.launchRating),
-                          this.launchRatingLoc.x,
-                          this.launchRatingLoc.y - 75 - (diffMS / RATING_WORD_TIME) * HEIGHT);
-
-    }
-
+    
     drainEventQueue() {
         while (this.eventQ.length > 0) {
             const evt = this.eventQ.shift();
@@ -718,18 +736,18 @@ class Game {
         let x = launchValue % 0.25;
         x = Math.min(x, 0.25 - x);
         const rating = x / 0.125;
-        this.launchRatingTime = Date.now();
-        this.launchRatingLoc = this.player.transformLocation();
+        this.player.launchRatingTime = Date.now();
+        this.player.launchRatingLoc = this.player.transformLocation();
         if (rating < 0.1) {
-            this.launchRating = Game.LaunchRating.PERFECT;
+            this.player.launchRating = Game.LaunchRating.PERFECT;
         } else if (rating < 0.3) {
-            this.launchRating = Game.LaunchRating.GREAT;
+            this.player.launchRating = Game.LaunchRating.GREAT;
         } else if (rating < 0.5) {
-            this.launchRating = Game.LaunchRating.GOOD;
+            this.player.launchRating = Game.LaunchRating.GOOD;
         } else if (rating < 0.75) {
-            this.launchRating = Game.LaunchRating.OKAY;
+            this.player.launchRating = Game.LaunchRating.OKAY;
         } else {
-            this.launchRating = Game.LaunchRating.POOR;
+            this.player.launchRating = Game.LaunchRating.POOR;
         }
     }
 
